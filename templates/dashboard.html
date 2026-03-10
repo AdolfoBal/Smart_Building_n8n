@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartHome IoT Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    
+    <!-- Collegamento ai file statici CSS e JS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+</head>
+<body>
+    <!-- Logs Modal -->
+    <div class="modal" id="logs-modal">
+        <div class="modal-content logs-modal-content">
+            <div class="modal-header">
+                <h2>📋 Log Agenti</h2>
+                <button class="modal-close" onclick="closeLogsModal()">×</button>
+            </div>
+            <div class="logs-controls">
+                <div class="logs-filter">
+                    <input type="text" id="logs-agent-filter" placeholder="Filtra per agente..." class="logs-search">
+                    <input type="date" id="logs-date-filter" class="logs-date">
+                    <button onclick="loadLogs()" class="logs-refresh-btn">🔄 Ricarica</button>
+                    <button onclick="resetLogs()" class="logs-reset-btn">🗑️ Reset</button>
+                </div>
+                <div class="logs-stats">
+                    <span id="logs-count">0 record</span>
+                </div>
+            </div>
+            <div class="logs-table-container">
+                <table class="logs-table">
+                    <thead>
+                        <tr>
+                            <th class="logs-col-timestamp">
+                                <button type="button" class="logs-sort-btn is-active" data-sort-key="timestamp" data-sort-default="desc">
+                                    <span>Timestamp</span>
+                                    <span class="logs-sort-indicator" aria-hidden="true">↓</span>
+                                </button>
+                            </th>
+                            <th class="logs-col-agent">
+                                <button type="button" class="logs-sort-btn" data-sort-key="agent">
+                                    <span>Agente</span>
+                                    <span class="logs-sort-indicator" aria-hidden="true">↕</span>
+                                </button>
+                            </th>
+                            <th class="logs-col-action">
+                                <button type="button" class="logs-sort-btn" data-sort-key="action">
+                                    <span>Azione</span>
+                                    <span class="logs-sort-indicator" aria-hidden="true">↕</span>
+                                </button>
+                            </th>
+                            <th class="logs-col-payload">
+                                <button type="button" class="logs-sort-btn" data-sort-key="payload">
+                                    <span>Payload</span>
+                                    <span class="logs-sort-indicator" aria-hidden="true">↕</span>
+                                </button>
+                            </th>
+                            <th class="logs-col-tools">Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-tbody">
+                        <tr><td colspan="5" style="text-align:center; color: var(--text-muted);">Caricamento...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control Panel Modal -->
+    <div class="modal" id="control-modal">
+        <div class="modal-content control-panel-modal">
+            <div class="modal-header">
+                <h2>⚙️ Pannello di Controllo</h2>
+                <button class="modal-close" onclick="closeControlPanel()">×</button>
+            </div>
+
+            <!-- Sezione: Simulazione -->
+            <div class="cp-section">
+                <div class="cp-section-title">🕹️ Simulazione</div>
+                <div class="cp-row">
+                    <div class="cp-card cp-card-wide">
+                        <div class="cp-card-label">⚡ Velocità Tempo</div>
+                        <div class="cp-slider-row">
+                            <input type="range" min="0" max="600" step="1" value="{{ velocita_tempo }}" class="cp-slider" id="speed-slider">
+                            <span class="cp-slider-value" id="speed-display">{{ velocita_tempo }} min/min</span>
+                        </div>
+                        <div class="cp-speed-indicator" id="speed-indicator" style="display:none">
+                            🐢 Rallentata a <span id="speed-actual">0</span> min/min (interazione UI)
+                        </div>
+                    </div>
+                    <div class="cp-card cp-card-action">
+                        <button class="cp-pause-btn" id="pause-btn" onclick="togglePause()">
+                            <span id="pause-icon">⏸️</span>
+                            <span id="pause-label">Pausa</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sezione: Ambiente -->
+            <div class="cp-section">
+                <div class="cp-section-title">🌍 Ambiente</div>
+                <div class="cp-row cp-row-3">
+                    <div class="cp-card">
+                        <div class="cp-card-label">☁️ Meteo</div>
+                        <select class="cp-select" id="weather-select">
+                            {% for opzione in ['Sereno','Nuvoloso','Pioggia','Temporale','Neve','Nebbia'] %}
+                                <option value="{{ opzione }}" {% if opzione == condizioni_meteo %}selected{% endif %}>{{ opzione }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="cp-card">
+                        <div class="cp-card-label">📅 Giorno</div>
+                        <select class="cp-select" id="day-select">
+                            <option value="0" {% if giorno_settimana_idx == 0 %}selected{% endif %}>Lunedì</option>
+                            <option value="1" {% if giorno_settimana_idx == 1 %}selected{% endif %}>Martedì</option>
+                            <option value="2" {% if giorno_settimana_idx == 2 %}selected{% endif %}>Mercoledì</option>
+                            <option value="3" {% if giorno_settimana_idx == 3 %}selected{% endif %}>Giovedì</option>
+                            <option value="4" {% if giorno_settimana_idx == 4 %}selected{% endif %}>Venerdì</option>
+                            <option value="5" {% if giorno_settimana_idx == 5 %}selected{% endif %}>Sabato</option>
+                            <option value="6" {% if giorno_settimana_idx == 6 %}selected{% endif %}>Domenica</option>
+                        </select>
+                    </div>
+                    <div class="cp-card">
+                        <div class="cp-card-label">🌿 Stagione</div>
+                        <select class="cp-select" id="season-select">
+                            <option value="0" {% if stagione_idx == 0 %}selected{% endif %}>❄️ Inverno</option>
+                            <option value="1" {% if stagione_idx == 1 %}selected{% endif %}>🌸 Primavera</option>
+                            <option value="2" {% if stagione_idx == 2 %}selected{% endif %}>☀️ Estate</option>
+                            <option value="3" {% if stagione_idx == 3 %}selected{% endif %}>🍂 Autunno</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sezione: Intervalli -->
+            <div class="cp-section">
+                <div class="cp-section-title">⏱️ Intervalli</div>
+                <div class="cp-row">
+                    <div class="cp-card">
+                        <div class="cp-card-label">🔄 Aggiornamento UI</div>
+                        <div class="cp-slider-row">
+                            <input type="range" min="1" max="10" step="1" value="{{ ui_update_interval_seconds }}" class="cp-slider" id="ui-update-slider">
+                            <span class="cp-slider-value" id="ui-update-display">{{ ui_update_interval_seconds }} s</span>
+                        </div>
+                    </div>
+                    <div class="cp-card">
+                        <div class="cp-card-label">🤖 N8n Update</div>
+                        <div class="cp-slider-row">
+                            <input type="range" min="10" max="300" step="10" value="{{ n8n_interval_seconds }}" class="cp-slider" id="n8n-update-slider">
+                            <span class="cp-slider-value" id="n8n-update-display">{{ n8n_interval_seconds }} s</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sezione: Developer -->
+            <div class="cp-section">
+                <div class="cp-section-title">🛠️ Developer</div>
+                <div class="cp-row">
+                    <div class="cp-card cp-toggle-card">
+                        <div class="cp-toggle-info">
+                            <div class="cp-card-label">🐛 Debug Mode</div>
+                            <div class="cp-card-hint">Azioni senza traccia lock</div>
+                        </div>
+                        <div class="cp-toggle-control">
+                            <label class="switch">
+                                <input type="checkbox" id="debug-toggle" onchange="toggleDebugMode(this)">
+                                <span class="slider"></span>
+                            </label>
+                            <span class="cp-toggle-status" id="debug-status">OFF</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🏠 SmartHome Dashboard</h1>
+            <p>Controllo e monitoraggio IoT in tempo reale</p>
+        </div>
+
+        <!-- Top Bar with Time, Weather and Environment -->
+        <div class="top-bar">
+            <div class="time-display-top">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 0.25rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span class="time-icon" id="time-icon-top">🌞</span>
+                        <span id="time-display-top" data-hour="{{ ora_corrente }}" data-minute="{{ minuto_corrente }}">{{ tempo_corrente }}</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--text-muted); font-weight: 500;">
+                        <span id="day-display">{{ giorno_settimana }}</span>
+                        <span style="opacity: 0.5; margin: 0 0.5rem;">•</span>
+                        <span style="font-size: 0.8rem;">Giorno #<span id="day-number">{{ giorno_numero }}</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="environment-card">
+                <div class="env-item">
+                    <div class="env-label">🌡️ Esterna</div>
+                    <div class="env-value temp-ext" id="temp-esterna">{{ "%.1f"|format(temp_esterna) }}°C</div>
+                </div>
+                <div class="env-divider"></div>
+                <div class="env-item">
+                    <div class="env-label">☁️ Meteo</div>
+                    <div class="env-value" id="weather-display" style="font-size: 1rem;">{{ condizioni_meteo }}</div>
+                </div>
+                <div class="env-divider"></div>
+                <div class="env-item">
+                    <div class="env-label">🌿 Stagione</div>
+                    <div class="env-value" id="season-display" style="font-size: 1rem;">
+                        {% if stagione == 'Inverno' %}❄️{% elif stagione == 'Primavera' %}🌸{% elif stagione == 'Estate' %}☀️{% else %}🍂{% endif %} {{ stagione }}
+                    </div>
+                </div>
+            </div>
+
+            <div class="live-indicator" style="margin-left: auto;">
+                <span class="live-dot"></span>
+                <span>Live</span>
+            </div>
+        </div>
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-value" id="stat-luci">{{ data.values() | selectattr('attuatori.luci', 'equalto', 'ON') | list | length }}</div>
+                <div class="stat-label">💡 Luci Attive</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-temp">{{ "%.1f"|format((data.values() | map(attribute='sensori.temperatura') | sum) / (data | length)) }}°C</div>
+                <div class="stat-label">🌡️ Temp Media</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-clima">{{ data.values() | selectattr('attuatori.clima', 'defined') | rejectattr('attuatori.clima', 'equalto', 'OFF') | list | length }}</div>
+                <div class="stat-label">❄️ Clima Attivo</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="stat-stanze">{{ data | length }}</div>
+                <div class="stat-label">🏠 Stanze Attive</div>
+            </div>
+        </div>
+
+        <!-- Rooms Grid -->
+        <div class="rooms-grid" id="rooms-container">
+            {% for nome_stanza, dati in data.items() %}
+            <div class="room-card" data-room="{{ nome_stanza }}">
+                <div class="room-header">
+                    <h2>
+                        <span class="room-icon">
+                            {% if nome_stanza == 'cucina' %}🍳
+                            {% elif nome_stanza == 'camera' %}🛏️
+                            {% elif nome_stanza == 'soggiorno' %}🛋️
+                            {% elif nome_stanza == 'bagno' %}🚿
+                            {% elif nome_stanza == 'garage' %}🚗
+                            {% elif nome_stanza == 'giardino' %}🌳
+                            {% else %}🏠{% endif %}
+                        </span>
+                        {{ nome_stanza.capitalize() }}
+                    </h2>
+                    <div class="room-status">
+                        <span class="status-dot"></span>
+                        <span>Online</span>
+                    </div>
+                </div>
+
+                <!-- Sensors -->
+                <div class="sensors-grid">
+                    <div class="sensor-item">
+                        <div class="sensor-icon color-temp">🌡️</div>
+                        <div class="sensor-value color-temp" data-sensor="temperatura">{{ dati.sensori.temperatura }}</div>
+                        <div class="sensor-label">°C</div>
+                    </div>
+                    <div class="sensor-item">
+                        <div class="sensor-icon color-light">💡</div>
+                        <div class="sensor-value color-light" data-sensor="luminosita">{{ dati.sensori.luminosita }}</div>
+                        <div class="sensor-label">Lux</div>
+                    </div>
+                    <div class="sensor-item">
+                        <div class="sensor-icon color-humidity">💧</div>
+                        <div class="sensor-value color-humidity" data-sensor="umidita">{{ dati.sensori.umidita }}</div>
+                        <div class="sensor-label">%</div>
+                    </div>
+                    <div class="sensor-item presence-tile" title="Clicca per segnalare presenza/assenza" role="button">
+                        <div class="sensor-icon color-presence">🧍</div>
+                        <div class="sensor-value color-presence" data-sensor="presenza">{{ 'Sì' if dati.sensori.presenza else 'No' }}</div>
+                        <div class="sensor-label">Presenza</div>
+                    </div>
+                </div>
+
+                <!-- Actuators -->
+                <div class="actuators-section">
+                    <div class="actuators-title">⚙️ Controlli</div>
+                    <div class="actuators-grid">
+                    {% for attuatore, stato in dati.attuatori.items() %}
+                        {% if attuatore == 'clima' %}
+                        <div class="clima-group">
+                            <button class="act-btn act-btn-heat {% if stato == 'HEAT' %}active{% endif %}"
+                                    data-room="{{ nome_stanza }}" data-attuatore="clima" data-action="HEAT"
+                                    onclick="toggleActBtn(this)">
+                                <span class="act-btn-icon">🔥</span>
+                                <span class="act-btn-label">Heat</span>
+                            </button>
+                            <button class="act-btn act-btn-cool {% if stato == 'COOL' %}active{% endif %}"
+                                    data-room="{{ nome_stanza }}" data-attuatore="clima" data-action="COOL"
+                                    onclick="toggleActBtn(this)">
+                                <span class="act-btn-icon">❄️</span>
+                                <span class="act-btn-label">Cool</span>
+                            </button>
+                        </div>
+                        {% else %}
+                        <button class="act-btn {% if attuatore == 'tapparelle' or attuatore == 'finestre' %}act-btn-shutter{% endif %} {% if stato == 'ON' or stato == 'APERTE' %}active{% endif %}"
+                                data-room="{{ nome_stanza }}" data-attuatore="{{ attuatore }}"
+                                onclick="toggleActBtn(this)">
+                            <span class="act-btn-icon">
+                                {% if attuatore == 'luci' %}💡
+                                {% elif attuatore == 'tv' %}📺
+                                {% elif attuatore == 'ventilazione' %}💨
+                                {% elif attuatore == 'porta_garage' %}🚗
+                                {% elif attuatore == 'irrigazione' %}🌱
+                                {% elif attuatore == 'tapparelle' %}⛓️
+                                {% elif attuatore == 'finestre' %}🪟
+                                {% else %}⚙️{% endif %}
+                            </span>
+                            <span class="act-btn-label">{{ attuatore.replace('_', ' ').capitalize() }}</span>
+                        </button>
+                        {% endif %}
+                    {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- API Documentation -->
+        <div class="api-section">
+            <h3>📡 API Endpoints</h3>
+            <div class="api-endpoints">
+                <!-- Stato & Dashboard -->
+                <div class="api-endpoint">
+                    <span class="api-method get">GET</span>
+                    <span class="api-path">/api/status</span>
+                    <span style="color: var(--text-muted);">→ Stato sistema per AI Agent (con lock bidirezionale)</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method get">GET</span>
+                    <span class="api-path">/api/dashboard/status</span>
+                    <span style="color: var(--text-muted);">→ Stato completo per Dashboard UI</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method get">GET</span>
+                    <span class="api-path">/api/status/esterno</span>
+                    <span style="color: var(--text-muted);">→ Contesto esterno minimo (manuale/esterno, non usato dalla dashboard)</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method get">GET</span>
+                    <span class="api-path">/api/status/{stanza}</span>
+                    <span style="color: var(--text-muted);">→ Stato stanza + contesto esterno</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method get">GET</span>
+                    <span class="api-path">/health</span>
+                    <span style="color: var(--text-muted);">→ Health check servizio (monitoring esterno)</span>
+                </div>
+                <!-- Controllo dispositivi -->
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/{stanza}/{attuatore}</span>
+                    <span style="color: var(--text-muted);">→ Controlla dispositivo</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/presence</span>
+                    <span style="color: var(--text-muted);">→ Segnala presenza/assenza e notifica n8n</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/actions/scenario/{nome}</span>
+                    <span style="color: var(--text-muted);">→ Scenario (manuale/API esterna)</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/query</span>
+                    <span style="color: var(--text-muted);">→ Query mirate (manuale/API esterna)</span>
+                </div>
+                <!-- Simulazione -->
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/time</span>
+                    <span style="color: var(--text-muted);">→ Imposta ora simulata (manuale/API esterna)</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/time-speed</span>
+                    <span style="color: var(--text-muted);">→ Velocità tempo (0-600 min/min)</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/day</span>
+                    <span style="color: var(--text-muted);">→ Imposta giorno della settimana</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/season</span>
+                    <span style="color: var(--text-muted);">→ Imposta stagione</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/weather</span>
+                    <span style="color: var(--text-muted);">→ Imposta condizione meteo</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/n8n-interval</span>
+                    <span style="color: var(--text-muted);">→ Intervallo AI Agent (10-300s)</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/pause</span>
+                    <span style="color: var(--text-muted);">→ Pausa/riprendi simulazione</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/debug</span>
+                    <span style="color: var(--text-muted);">→ Attiva/disattiva modalità debug</span>
+                </div>
+                <!-- Preferenze -->
+                <div class="api-endpoint">
+                    <span class="api-method get">GET</span>
+                    <span class="api-path">/api/preferences</span>
+                    <span style="color: var(--text-muted);">→ Tutte le preferenze utente</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method get">GET</span>
+                    <span class="api-path">/api/preferences/{stanza}</span>
+                    <span style="color: var(--text-muted);">→ Preferenze stanza specifica</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method put">PUT</span>
+                    <span class="api-path">/api/preferences/{stanza}</span>
+                    <span style="color: var(--text-muted);">→ Modifica preferenze stanza</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method delete">DEL</span>
+                    <span class="api-path">/api/preferences/{stanza}</span>
+                    <span style="color: var(--text-muted);">→ Reset preferenze stanza</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method delete">DEL</span>
+                    <span class="api-path">/api/preferences</span>
+                    <span style="color: var(--text-muted);">→ Reset preferenze globali (tutte le stanze)</span>
+                </div>
+                <!-- Agent & Logs -->
+                <div class="api-endpoint">
+                    <span class="api-method post">POST</span>
+                    <span class="api-path">/api/agent/action</span>
+                    <span style="color: var(--text-muted);">→ Log azione AI Agent (uso agent/integratori esterni)</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method get">GET</span>
+                    <span class="api-path">/api/logs/agent</span>
+                    <span style="color: var(--text-muted);">→ Log agenti (con filtri)</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method delete">DEL</span>
+                    <span class="api-path">/api/logs/agent</span>
+                    <span style="color: var(--text-muted);">→ Cancella log agenti</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method delete">DEL</span>
+                    <span class="api-path">/api/logs/agent/delete?agent=...&date=...</span>
+                    <span style="color: var(--text-muted);">→ Cancella log filtrati per agente e/o data</span>
+                </div>
+                <div class="api-endpoint">
+                    <span class="api-method get">GET</span>
+                    <span class="api-path">/api/logs/analysis</span>
+                    <span style="color: var(--text-muted);">→ Analisi e statistiche log</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>🔄 Aggiornamento automatico live</p>
+            <p style="margin-top: 0.5rem;">
+                📊 Ultimo update: <span id="last-data-update">--:--:--</span> | 
+                🤖 AI Agent: <span id="last-n8n-update">--:--:--</span>
+            </p>
+            <p style="margin-top: 0.5rem;">SmartHome IoT System • Tesi 2026 • Adolfo Balzano</p>
+        </div>
+    </div>
+
+    <!-- Floating Control Button -->
+    <button class="control-btn" onclick="openControlPanel()" title="Apri pannello di controllo">⚙️</button>
+    
+    <!-- Floating Preferences Button -->
+    <button class="prefs-btn" onclick="openPreferencesModal()" title="Preferenze utente">👤</button>
+
+    <!-- Floating Logs Button -->
+    <button class="logs-btn" onclick="openLogsModal()" title="Visualizza log agenti">📋</button>
+
+    <!-- Preferences Modal -->
+    <div class="modal" id="prefs-modal">
+        <div class="modal-content prefs-modal-content">
+            <div class="modal-header">
+                <h2>👤 Preferenze Utente</h2>
+                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                    <button class="prefs-reset-btn" onclick="resetPreferences()" title="Ripristina default">🔄 Reset</button>
+                    <button class="modal-close" onclick="closePreferencesModal()">×</button>
+                </div>
+            </div>
+
+            <!-- Note Generali -->
+            <div class="pref-section">
+                <div class="pref-section-title">📝 Note Generali</div>
+                <div class="pref-row pref-row-full">
+                    <div class="pref-card pref-card-wide">
+                        <div class="pref-card-label">Istruzioni valide per tutta la casa</div>
+                        <textarea class="pref-textarea" id="pref-global-note" placeholder="Istruzioni generali per Mario e Luigi..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stanze -->
+            <div id="prefs-rooms-container"></div>
+
+            <!-- Salva -->
+            <div class="pref-actions">
+                <button class="pref-save-btn" onclick="saveAllPreferences()">💾 Salva Preferenze</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JSON Viewer Modal -->
+    <div class="modal" id="json-viewer-modal">
+        <div class="modal-content json-viewer-modal-content">
+            <div class="modal-header">
+                <h2>📄 <span id="json-viewer-title">JSON Snapshot</span></h2>
+                <div class="json-viewer-actions">
+                    <button class="json-copy-btn" onclick="copyJsonToClipboard()" title="Copia JSON">📋 Copia</button>
+                    <button class="modal-close" onclick="closeJsonViewer()">×</button>
+                </div>
+            </div>
+            <div class="json-viewer-meta" id="json-viewer-meta"></div>
+            <div class="json-viewer-body">
+                <pre id="json-viewer-content"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Collegamento al JavaScript esterno -->
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

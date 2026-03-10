@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.vscode/
+logs/
+logs/agent-day-01-lunedì.jsonl

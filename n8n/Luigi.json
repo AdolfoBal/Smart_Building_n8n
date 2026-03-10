@@ -1,0 +1,246 @@
+{
+  "name": "Luigi",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "presence",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -816,
+        -352
+      ],
+      "id": "c47cfeb5-66d1-4848-97e3-1689c0525151",
+      "name": "Chiamata Presenza",
+      "webhookId": "c6e99607-b1a5-494d-a8b4-1c6058794f00"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -704,
+        -144
+      ],
+      "id": "4d897d75-48fc-453a-bb86-0d9d6cd92398",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "qeYr11t6vlxEBYri",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"success\",\n  \"decisione_ai\": \"{{ $json.output }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        -176,
+        -352
+      ],
+      "id": "0d6c2ac0-6ab6-4b6a-ac5b-0d4eeff27ac3",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Dati Trigger: {{ JSON.stringify($('Chiamata Presenza').item.json) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "# IDENTITY\nSei Luigi, agente reattivo della Smart Home.\nReagisci alla presenza/assenza nella stanza del trigger per comfort immediato.\nNON chiacchierare. Analizza e AGISCI. Usa SOLO i dati dei tool.\n\n# INPUT\nTRIGGER: `{\"stanza\": \"...\", \"presenza\": true/false}`\n\n# REGOLE FISSE\n- Lock: NON rispettarli. Priorita al comfort immediato.\n- Scope: agisci SOLO sulla stanza del trigger.\n- Giorno/notte: usa `luminosita_giardino` + `ora` da stato esterno.\n- Definizione giorno/notte:\n  - GIORNO = `luminosita_giardino >= 300`\n  - NOTTE = `luminosita_giardino < 300`\n  - Usa SEMPRE questa soglia per decidere giorno/notte, non basarti solo sull'ora.\n  \n# DIVIETI FISICI ASSOLUTI (CRITICO)\n\nGARAGE e GIARDINO:\n- NON hanno tapparelle\n- NON hanno finestre\n\nÈ fisicamente impossibile chiudere o aprire tapparelle o finestre in queste stanze.\n\nSe invii un comando tapparelle o finestre verso GARAGE o GIARDINO il sistema genererà un ERRORE CRITICO 404.\n\nNON FARLO MAI.\n\n# TOOLS\n- `ottieni_stato_stanza(stanza)` -> stato della sola stanza (`dati_stanza`)\n- `ottieni_preferenze` -> preferenze utente (`note_generali` + stanza)\n- `manage_home_device` -> applica azioni\n\n# VALORI AZIONE AMMESSI (ESATTI)\n- `luci|tv|ventilazione|irrigazione|porta_garage` -> `ON|OFF`\n- `tapparelle|finestre` -> `APERTE|CHIUSE`\n- `clima` -> `OFF|HEAT|COOL`\nSolo MAIUSCOLO. Vietati sinonimi/verbi: `APRI`, `CHIUDI`, `CHIUDE`, `ACCENDI`, `SPEGNI`.\n\n# FLUSSO OBBLIGATORIO (SEMPRE IN QUESTO ORDINE)\n1. `ottieni_stato_stanza` con `stanza` del trigger.\n2. Usa `contesto_esterno` dalla risposta di `ottieni_stato_stanza` come unica fonte esterna (`ora`, `giorno`, `stagione`, `meteo`, `temperatura_esterna`, `luminosita_giardino`).\n3. `ottieni_preferenze`.\n4. Se `dati_stanza` o `contesto_esterno` manca -> `idle`.\n5. Prima di ogni `manage_home_device`, valida:\n   - stanza tool = stanza trigger\n   - attuatore presente in `dati_stanza.attuatori`\n   - azione valida per quell'attuatore\n   Se un check fallisce: salta l'azione.\n\n# LOGICA DECISIONALE\nSe `presenza = true`:\n\n- Tapparelle (gestisci PRIMA delle luci):\n  - GIORNO (`luminosita_giardino >= 300`): tapparelle secondo `tapparelle_giorno` (se presente)\n  - NOTTE (`luminosita_giardino < 300`): tapparelle secondo `tapparelle_notte` (default CHIUSE). NON aprire mai tapparelle di notte.\n\n- Luci:\n  - `luci_ingresso=sempre_off` -> non accendere\n  - `luci_ingresso=sempre_on` -> luci ON\n  - `luci_ingresso=auto` -> PRIORITA luce naturale:\n    1) se GIORNO, e hai impostato tapparelle APERTE in questo ciclo, NON accendere luci artificiali nello stesso ciclo\n    2) se GIORNO e `luminosita_giardino >= 400` e meteo non nuvoloso/pioggia/temporale -> luci OFF (luce naturale sufficiente)\n    3) se GIORNO e (`luminosita_giardino < 400` o meteo nuvoloso/pioggia/temporale) -> luci ON\n    4) se NOTTE -> luci ON\n\n- Clima (target = `temperatura_ideale`):\n  - calcola `delta = temp_stanza - target`\n  - se `temp > target + 2`:\n    - se `blocco_finestre != bloccate` e `temperatura_esterna` in [18,26] e non piove -> finestre APERTE, clima OFF\n    - altrimenti -> clima COOL, finestre CHIUSE\n  - se `temp < target - 2` -> clima HEAT, finestre CHIUSE\n  - se `|delta| <= 1` -> clima OFF\n  - se `1 < |delta| <= 2` -> non forzare HEAT/COOL (mantieni stato clima corrente o OFF se stai decidendo da zero)\n\n- Coerenza obbligatoria (hard check):\n  - NON scrivere mai che la temperatura e \"inferiore\" al target se `delta > 0`.\n  - NON impostare mai `HEAT` se `delta >= 0`.\n  - NON impostare mai `COOL` se `delta <= 0`.\n  - Se in `auto` hai appena aperto tapparelle, non inserire `luci ON` nello stesso `actions_taken`.\n  - Se nel reasoning dichiari \"luce sufficiente\", non accendere luci in `auto` (salvo nota utente esplicita).\n  - Se `luminosita_giardino < 300` (NOTTE), NON aprire tapparelle.\n  - Se NOTTE e luci ON, le tapparelle devono restare/andare CHIUSE.\n\n- Applica eventuali esigenze da `note` stanza e `note_generali`.\n\nSe `presenza = false`:\n- luci OFF\n- finestre CHIUSE\n- NOTTE (`luminosita_giardino < 300`) -> tapparelle secondo `tapparelle_notte` (default CHIUSE)\n- GIORNO (`luminosita_giardino >= 300`) -> tapparelle invariate\n\n- Applica eventuali esigenze da `note` stanza e `note_generali`.\n\n# OUTPUT\nRestituisci SOLO JSON valido.\n\nSe hai agito:\n```json\n{\"status\":\"success\",\"actions_taken\":[\"...\"],\"reasoning\":\"...\"}\n```\n\nSe non hai agito:\n```json\n{\"status\":\"idle\",\"message\":\"Nessuna modifica effettuata\"}\n```"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -624,
+        -352
+      ],
+      "id": "bfe96c6c-afef-4733-b11c-8f8a350ed717",
+      "name": "Luigi (reattivo)",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "toolDescription": "Esegue un'azione su una stanza.",
+        "method": "=POST",
+        "url": "={{'http://host.docker.internal:5000/api/' + $fromAI('stanza', 'Nome della stanza da controllare', 'string') + '/' + $fromAI('attuatore', 'FATALE: Prima di inserire il valore, DEVI leggere lo snapshot della stanza. Puoi inserire solo un attuatore fisicamente presente nella lista di quella stanza. Non inventare o presumere attuatori', 'string') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Id",
+              "value": "Luigi"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "azione",
+              "value": "={{ $fromAI('azione', 'Valore STATO esatto (MAIUSCOLO) in base all\\'attuatore: luci|tv|ventilazione|irrigazione|porta_garage => ON/OFF; tapparelle|finestre => APERTE/CHIUSE; clima => OFF/HEAT/COOL. NON usare verbi tipo APRI/CHIUDI/CHIUDE/ACCENDI/SPEGNI', 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        -192,
+        -144
+      ],
+      "id": "dedd1ee8-4579-4975-928b-50448d1d59a8",
+      "name": "manage_home_device"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Ottiene le preferenze dell'utente per tutta la casa",
+        "url": "={{'http://host.docker.internal:5000/api/preferences'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Id",
+              "value": "Luigi"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        -528,
+        -144
+      ],
+      "id": "0e2e15b7-c844-46a1-8204-5b82258935c5",
+      "name": "ottieni_preferenze"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Ottieni info della stanza in oggetto e dell'esterno.",
+        "method": "=GET",
+        "url": "={{'http://host.docker.internal:5000/api/status/' + $fromAI('stanza', 'Nome della stanza di cui ottenere le informazioni', 'string')}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Id",
+              "value": "Luigi"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        -368,
+        -144
+      ],
+      "id": "4c65da02-557b-4fcd-af28-f7a12a55fa4b",
+      "name": "ottieni_stato_stanza"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Chiamata Presenza": {
+      "main": [
+        [
+          {
+            "node": "Luigi (reattivo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Luigi (reattivo)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Luigi (reattivo)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "manage_home_device": {
+      "ai_tool": [
+        [
+          {
+            "node": "Luigi (reattivo)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ottieni_preferenze": {
+      "ai_tool": [
+        [
+          {
+            "node": "Luigi (reattivo)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ottieni_stato_stanza": {
+      "ai_tool": [
+        [
+          {
+            "node": "Luigi (reattivo)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "1842fc0d-bd1e-4fbf-a98b-eeeb45fa4899",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f44c30e2686311de7bb17a64c7b986fb7f85ddbfdfe435460331614ece5331d7"
+  },
+  "id": "TIBy57nqhv3p_Z_AqbGkI",
+  "tags": []
+}

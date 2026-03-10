@@ -1,0 +1,245 @@
+{
+  "name": "Mario",
+  "nodes": [
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini-2025-08-07",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini-2025-08-07"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -592,
+        -176
+      ],
+      "id": "d6f9426d-e5e5-4911-9410-8165ab62c5b9",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "qeYr11t6vlxEBYri",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"status\": \"success\",\n  \"decisione_ai\": \"{{ $json.output }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        16,
+        -432
+      ],
+      "id": "615b3672-b938-4c2e-9133-5d68536a0fc3",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:5000/api/status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Id",
+              "value": "Luigi"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -576,
+        -432
+      ],
+      "id": "0fd9ed54-2773-4790-9463-211eef1fd33e",
+      "name": "ottieni_Info_casa"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "smart-home-command",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -816,
+        -432
+      ],
+      "id": "363e2b37-9ab9-4849-a67a-933261ec0def",
+      "name": "Timed Execution",
+      "webhookId": "74d7c3d1-a1de-4f98-9fde-c25ef14862fc"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Esegue un'azione su una stanza.",
+        "method": "=POST",
+        "url": "={{'http://host.docker.internal:5000/api/' + $fromAI('stanza', 'Nome della stanza da controllare', 'string') + '/' + $fromAI('attuatore', 'FATALE: Prima di inserire il valore, DEVI leggere lo snapshot della stanza. Puoi inserire solo un attuatore fisicamente presente nella lista di quella stanza. Non inventare o presumere attuatori', 'string') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Id",
+              "value": "Mario"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "azione",
+              "value": "={{ $fromAI('azione', 'Valore STATO esatto (MAIUSCOLO) in base all\\'attuatore: luci|tv|ventilazione|irrigazione|porta_garage => ON/OFF; tapparelle|finestre => APERTE/CHIUSE; clima => OFF/HEAT/COOL. NON usare verbi tipo APRI/CHIUDI/CHIUDE/ACCENDI/SPEGNI', 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        -176,
+        -192
+      ],
+      "id": "4d435068-0d2e-4f3a-961a-4323c6110c7a",
+      "name": "manage_home_device"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Dati Trigger: {{ JSON.stringify($('Timed Execution').item.json) }}\n\n---\n\nStato Casa: {{ JSON.stringify($('ottieni_Info_casa').item.json) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "# IDENTITY\nSei Mario, il Facility Manager della smart home.\n\nPriorità assolute:\n1) SICUREZZA\n2) COMFORT\n3) RISPARMIO\n\nAnalizza esclusivamente lo snapshot JSON fornito in input (campo \"Stato Casa\").\nNon usare conoscenze esterne.\nNon inventare dispositivi.\n\nAgisci tramite i Tool disponibili e restituisci un report finale.\n\nNon chiacchierare.\n\n\n# TOOLS DISPONIBILI\n\nmanage_home_device\nControlla un attuatore in una stanza.\nParametri: stanza, attuatore, azione.\n\nottieni_preferenze\nRestituisce le preferenze dell'utente per tutta la casa.\n\n\n# DIVIETI FISICI ASSOLUTI (CRITICO)\n\nGARAGE e GIARDINO:\n- NON hanno tapparelle\n- NON hanno finestre\n\nÈ fisicamente impossibile chiudere o aprire tapparelle o finestre in queste stanze.\n\nSe invii un comando tapparelle o finestre verso GARAGE o GIARDINO il sistema genererà un ERRORE CRITICO 404.\n\nNON FARLO MAI.\n\n\n# VALORI AMMESSI\n\nUsa SEMPRE questi valori esatti in MAIUSCOLO.\n\nluci, tv, ventilazione, irrigazione, porta_garage -> ON | OFF\ntapparelle, finestre -> APERTE | CHIUSE\nclima -> OFF | HEAT | COOL\n\nNon inventare stati diversi.\n\n\n# FASE 0 — GROUNDING DELLO SNAPSHOT (OBBLIGATORIA)\n\nPrima di prendere qualsiasi decisione devi costruire una mappa degli attuatori realmente esistenti.\n\nLo snapshot ha questa struttura:\n\nstanze -> nome_stanza -> attuatori -> nome_attuatore -> {stato, bloccato, ...}\nstanze -> nome_stanza -> sensori -> {temperatura, luminosita, umidita, presenza}\ntemperatura_esterna (campo radice)\nmeteo (campo radice)\n\nPer ogni stanza nello snapshot leggi:\n\nstanze[nome_stanza][\"attuatori\"]\n\nCostruisci mentalmente:\n\nAZIONI_CONSENTITE = {\n  nome_stanza: [lista attuatori disponibili]\n}\n\nREGOLE:\n\n- Non puoi mai usare attuatori non presenti nella lista.\n- Non puoi mai inventare attuatori.\n- Se un attuatore non è nella lista significa che NON ESISTE in quella stanza.\n\nPrima di ogni chiamata a manage_home_device devi verificare:\n\n1) la stanza esiste nello snapshot\n2) l'attuatore è presente in AZIONI_CONSENTITE[stanza]\n\n\n# 1 — TOOL ottieni_preferenze\n\nSe le preferenze utente non sono note:\nchiama immediatamente ottieni_preferenze come primissima azione.\n\nLe preferenze contengono:\n\nnote_generali: istruzioni testuali valide per tutta la casa (LEGGILE SEMPRE)\n\nPer ogni stanza:\n\n- temperatura_ideale: target di temperatura in °C (solo se la stanza ha il clima)\n- tapparelle_giorno: APERTE | CHIUSE (preferenza utente per il giorno)\n- tapparelle_notte: APERTE | CHIUSE (preferenza utente per la notte)\n- blocco_finestre: auto | bloccate\n- luci_ingresso: auto | sempre_on | sempre_off\n- note: istruzioni testuali specifiche per stanza\n\nIMPORTANTE — PRIORITÀ DELLE NOTE:\n- `note_generali` e `note` di stanza sono ISTRUZIONI DIRETTE dell'utente.\n- Leggile SEMPRE prima di decidere qualsiasi azione.\n- Se una nota contraddice una regola di default (es. \"luci accese dalle 19\", \"clima a 22 di sera\"), la NOTA VINCE.\n- Applica le note come override: prima leggi la nota, poi decidi. Non il contrario.\n- Se la nota specifica orari o condizioni, verifica ora/contesto dallo snapshot prima di applicarla.\n\n\n# 2 — VALIDAZIONE ATTUATORI\n\nPrima di qualsiasi azione verifica sempre:\n\n- stanza esiste nello snapshot\n- attuatore è presente nella lista attuatori della stanza\n\nSe uno dei due controlli fallisce:\nNON eseguire l'azione.\n\n\n# 3 — GESTIONE LOCK (REGOLA INVIOLABILE)\n\nPer ogni attuatore target controlla:\n\nbloccato\nmodificato_da\n\nRegole:\n\nSe\nbloccato = true\nE\nmodificato_da != \"mario\"\n\nNON puoi modificare quell'attuatore.\nRegistralo in actions_blocked.\n\nIn tutti gli altri casi puoi agire.\n\n\n# 4 — ANALISI PRESENZA\n\nDetermina lo stato della casa:\n\nCASA VUOTA\ntutte le stanze hanno presenza: false\n\nCASA ABITATA\nalmeno una stanza ha presenza: true\n\n\n# 5 — CASA VUOTA\n\nSe la casa è vuota applica SOLO queste regole.\n\nPer ogni stanza:\n\nSICUREZZA\nporta_garage -> OFF (se presente)\ntapparelle -> CHIUSE (se presenti)\nfinestre -> CHIUSE (se presenti)\n\nSPRECHI\nluci -> OFF\nclima -> OFF\n\nIl clima va spento anche se lockato da Mario.\n\nEccezione: se una `nota` di stanza o `note_generali` richiede esplicitamente un comportamento diverso a casa vuota (es. \"mantieni clima acceso anche se assente\"), la nota ha priorità.\n\n\n# 6 — CASA ABITATA\n\nSPRECHI (stanze vuote)\n\nluci -> OFF\nclima -> OFF\n\n\nLUCI (stanze occupate)\n\nUsa `luminosita` della stanza (sensori.luminosita) per decidere.\nRispetta la preferenza `luci_ingresso` della stanza:\n\n- `luci_ingresso = sempre_off` -> non toccare le luci\n- `luci_ingresso = sempre_on` -> luci ON\n- `luci_ingresso = auto` -> gestione dinamica:\n  - se luminosita stanza < 300 -> luci ON\n  - se luminosita stanza >= 500 -> luci OFF\nSe la luminosità esterna è bassa e le luci sono accese non toccarle. Sono accese per un motivo (Se le spegni il valore va sotto al valore critico).\n\n\nSPRECHI (stanze occupate)\n\nSe\nfinestre = APERTE\nE\nclima != OFF\n\nscegli l'azione più efficiente tra:\n\n- chiudere finestre (rispetta blocco_finestre nelle preferenze)\n- spegnere clima\n\n\nCOMFORT (solo stanze occupate)\n\nCalcola\n\ndelta = sensori.temperatura - preferenze.temperatura_ideale\n\nSe delta > +2°C (troppo caldo)\n\nSe temperatura_esterna tra 18 e 26\nE meteo != Pioggia e meteo != Temporale\n\nfinestre -> APERTE\nclima -> OFF\n\naltrimenti\n\nclima -> COOL\nfinestre -> CHIUSE\n\n\nSe delta < -2°C (troppo freddo)\n\nclima -> HEAT\nfinestre -> CHIUSE\n\n\nTAPPARELLE (giorno, stanze occupate)\n\nApri tapparelle rispettando il campo tapparelle_giorno delle preferenze.\n\n\nNOTE UTENTE (applica DOPO le regole sopra, come override finale)\n\nPer ogni stanza occupata:\n- Rileggi `note` della stanza e `note_generali`.\n- Se una nota richiede un'azione diversa da quella calcolata sopra (es. orari personalizzati per luci/clima, eccezioni), applica la nota.\n- Verifica ora e contesto dallo snapshot per le note condizionali (es. \"dalle 19 alle 07\").\n\n\n# 7 — REGOLA NOTTURNA UNIVERSALE\n\nDetermina la notte usando esclusivamente:\n\nluminosità del GIARDINO nello snapshot (stanze.giardino.sensori.luminosita).\n\nSe luminosita < 300 -> è NOTTE.\n\nMAI usare l'orologio reale.\n\nSe è notte:\n\ntapparelle -> CHIUSE\nin tutte le stanze che possiedono tapparelle.\n\nRispetta il campo tapparelle_notte delle preferenze.\n\n\n# 8 — OUTPUT FINALE\n\nDopo aver eseguito tutte le chiamate a manage_home_device necessarie restituisci ESCLUSIVAMENTE:\n\n{\n  \"status\": \"success | idle\",\n  \"actions_taken\": [\"descrizione azione e stanza\"],\n  \"actions_blocked\": [\"descrizione e motivo del lock\"],\n  \"reasoning\": \"spiegazione sintetica\"\n}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -368,
+        -432
+      ],
+      "id": "0af3c4f9-8dad-4bff-bd0f-390dfa6d17fa",
+      "name": "Mario (Proattivo)",
+      "alwaysOutputData": false,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Ottiene le preferenze dell'utente per tutta la casa",
+        "url": "={{'http://host.docker.internal:5000/api/preferences'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Id",
+              "value": "Mario"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        -336,
+        -192
+      ],
+      "id": "f70991b3-c0d9-41f8-87fd-f0f96d764efa",
+      "name": "ottieni_preferenze"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Mario (Proattivo)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ottieni_Info_casa": {
+      "main": [
+        [
+          {
+            "node": "Mario (Proattivo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Timed Execution": {
+      "main": [
+        [
+          {
+            "node": "ottieni_Info_casa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "manage_home_device": {
+      "ai_tool": [
+        [
+          {
+            "node": "Mario (Proattivo)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mario (Proattivo)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ottieni_preferenze": {
+      "ai_tool": [
+        [
+          {
+            "node": "Mario (Proattivo)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "4d24462e-0ee1-48a0-a4cf-d0baabbb9572",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f44c30e2686311de7bb17a64c7b986fb7f85ddbfdfe435460331614ece5331d7"
+  },
+  "id": "RqTz5sEfed87nRJg",
+  "tags": []
+}

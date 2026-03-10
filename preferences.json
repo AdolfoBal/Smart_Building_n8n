@@ -1,0 +1,43 @@
+{
+  "note_generali": "",
+  "cucina": {
+    "luci_ingresso": "auto",
+    "note": "",
+    "temperatura_ideale": 22.0,
+    "tapparelle_giorno": "APERTE",
+    "tapparelle_notte": "CHIUSE",
+    "blocco_finestre": "auto"
+  },
+  "camera": {
+    "luci_ingresso": "auto",
+    "note": "",
+    "temperatura_ideale": 20.0,
+    "tapparelle_giorno": "APERTE",
+    "tapparelle_notte": "CHIUSE",
+    "blocco_finestre": "auto"
+  },
+  "soggiorno": {
+    "luci_ingresso": "auto",
+    "note": "",
+    "temperatura_ideale": 22.0,
+    "tapparelle_giorno": "APERTE",
+    "tapparelle_notte": "CHIUSE",
+    "blocco_finestre": "auto"
+  },
+  "bagno": {
+    "luci_ingresso": "auto",
+    "note": "",
+    "temperatura_ideale": 23.0,
+    "tapparelle_giorno": "APERTE",
+    "tapparelle_notte": "CHIUSE",
+    "blocco_finestre": "auto"
+  },
+  "garage": {
+    "luci_ingresso": "auto",
+    "note": ""
+  },
+  "giardino": {
+    "luci_ingresso": "auto",
+    "note": ""
+  }
+}

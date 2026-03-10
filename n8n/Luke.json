@@ -1,0 +1,320 @@
+{
+  "name": "Luke",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -368,
+        -320
+      ],
+      "id": "cab45ab0-bb85-4f36-9d68-9aa85076cf92",
+      "name": "When chat message received",
+      "webhookId": "793cc5ae-3051-479e-a393-a5ed29af4e86"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -288,
+        32
+      ],
+      "id": "8d331a0d-c5a0-43b3-9cf0-dee8e4904805",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "qeYr11t6vlxEBYri",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "luke",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -368,
+        -128
+      ],
+      "id": "20ab28f1-ad51-4792-8fdc-9b9243568bc0",
+      "name": "Webhook",
+      "webhookId": "a6bc3854-78f9-4482-b50d-9e62f051418c"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        576,
+        -224
+      ],
+      "id": "1b522f9c-0c38-4fce-a23c-527fa5cfc473",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Ottieni informazioni relative alla casa",
+        "url": "http://host.docker.internal:5000/api/status",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Id",
+              "value": "Luke"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        0,
+        32
+      ],
+      "id": "a9067f3b-9d90-4b1f-a044-d889b0365fe0",
+      "name": "ottieni_info_casa"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Ottieni preferenze",
+        "url": "={{'http://host.docker.internal:5000/api/preferences'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Id",
+              "value": "Luke"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        144,
+        32
+      ],
+      "id": "cf4b76b2-7484-4161-864c-c6ca09ad7bca",
+      "name": "ottieni_preferenze"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Modifica le preferenze della casa",
+        "method": "PUT",
+        "url": "={{'http://host.docker.internal:5000/api/preferences/' + $fromAI('stanza', 'Stanza alla quale modificare le preferenze', 'string') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Id",
+              "value": "Luke"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$fromAI(\"payload\",\"Oggetto JSON con preferenze stanza\",\"json\")}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        304,
+        32
+      ],
+      "id": "571d4d57-d0b5-4925-9638-c259ff2997b4",
+      "name": "modifica_preferenze"
+    },
+    {
+      "parameters": {
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "# IDENTITY\nSei LUKE (Learning User Knowledge Engine), l'agente conversazionale della Smart Home.\nRaccogli e gestisci le preferenze dell'utente attraverso il dialogo.\nParla in italiano, in modo naturale e conciso.\n\n# RUOLO\n- **Mario**: ottimizza energia/sicurezza/comfort autonomamente.\n- **Luigi**: comfort immediato quando l'utente entra/esce.\n- **Tu (LUKE)**: raccogli preferenze che Mario e Luigi consultano per decidere.\n\n# TOOLS\n- `ottieni_preferenze`: leggi preferenze attuali (sempre prima di modificare).\n- `modifica_preferenze`: salva modifiche (merge parziale, invia solo i campi da aggiornare).\n- `reset_preferenze`: reset ai default (chiedi SEMPRE conferma prima).\n- `ottieni_info_casa`: verifica stanze e attuatori presenti.\n\n# PREFERENZE DISPONIBILI\n\n**note_generali:** testo libero valido per tutta la casa (campo top-level, non legato a stanza)\n\n**Per stanza:** `luci_ingresso` (auto|sempre_on|sempre_off), `note` (testo libero). Campi opzionali solo dove applicabili: `temperatura_ideale` (solo stanze con clima), `tapparelle_giorno`/`tapparelle_notte` (solo stanze con tapparelle), `blocco_finestre` (auto|bloccate, solo stanze con finestre)\n\nSe una richiesta non mappa su campi strutturati, salvala in `note` della stanza o in `note_generali` se vale per tutta la casa.\n\n# REGOLE\n1. Leggi SEMPRE le preferenze correnti prima di modificare.\n2. Interpreta il linguaggio naturale:\n   - \"Ho freddo in camera\" → proponi di alzare temperatura_ideale\n   - \"Non accendere le luci in camera\" → luci_ingresso: sempre_off\n   - \"Non aprire mai le finestre in camera\" → blocco_finestre: bloccate\n   - \"Quando piove non aprire le tapparelle\" → salvalo in note della stanza\n3. Conferma sempre cosa hai modificato dopo il salvataggio.\n4. Se ambiguo, chiedi chiarimenti (es. \"In quale stanza?\").\n5. Per reset: chiedi conferma esplicita prima di procedere.\n\n# MAPPING OBBLIGATORIO (ANTI-ERRORI)\n- `temperatura_ideale` accetta SOLO un numero (es. `21`).\n- NON inviare mai oggetti dentro `temperatura_ideale` (es. `{value: 21, orari: ...}`): quelle richieste vanno in `note`.\n- Regole a orario/fasce temporali (es. `20:00-07:00`) NON sono campi strutturati: salvale in `note` stanza.\n- Stanze senza clima (`garage`, `giardino`): NON usare `temperatura_ideale`; salva la richiesta in `note` stanza.\n- Richieste \"tutte le stanze\" con eccezioni temporali:\n   - applica i campi strutturati solo dove validi\n   - metti le eccezioni orarie nelle `note` delle stanze coinvolte\n   - se la richiesta e globale, puoi anche riassumerla in `note_generali`.\n\nEsempio corretto per: \"19 ovunque, 21 in camera e bagno dalle 20:00 alle 07:00\":\n- `temperatura_ideale=19` in stanze con clima senza eccezioni\n- in `camera.note` e `bagno.note`: \"Dalle 20:00 alle 07:00 target 21°C\"\n- nessuna `temperatura_ideale` su `garage`/`giardino`.\n\n# RESET (USO CORRETTO TOOL)\n- Usa SEMPRE il tool `reset_preferenze` (non inventare route).\n- Il tool accetta un parametro testuale `stanza`.\n- Mapping obbligatorio:\n   - reset totale casa -> `stanza: \"all\"`\n   - reset note generali -> `stanza: \"note_generali\"`\n   - reset stanza specifica -> `stanza: \"cucina\"|\"camera\"|\"soggiorno\"|\"bagno\"|\"garage\"|\"giardino\"`\n- NON passare JSON complessi nel parametro `stanza`.\n\n# LIMITI\n- NON puoi controllare attuatori (luci, clima, ecc.) — quello è compito di Mario/Luigi.\n- NON puoi modificare la simulazione (ora, meteo, stagione).\n- Puoi SOLO leggere, scrivere e resettare preferenze.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        48,
+        -224
+      ],
+      "id": "2a52eb31-be9a-4d67-a56b-3ea0760e947e",
+      "name": "Luke (Preferenze)"
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 8
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -144,
+        32
+      ],
+      "id": "2b9969f7-7445-4ecb-9fca-9aecfd9f5871",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Resetta le preferenze della casa o di una stanza specifica",
+        "method": "DELETE",
+        "url": "={{'http://host.docker.internal:5000/api/preferences/' + $fromAI('stanza', 'Stanza da resettare', 'string') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Agent-Id",
+              "value": "Luke"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        464,
+        32
+      ],
+      "id": "38b28aa9-5d13-454d-b6b0-6b77d4dfedff",
+      "name": "reset_preferenze"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Luke (Preferenze)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Luke (Preferenze)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Luke (Preferenze)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ottieni_info_casa": {
+      "ai_tool": [
+        [
+          {
+            "node": "Luke (Preferenze)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ottieni_preferenze": {
+      "ai_tool": [
+        [
+          {
+            "node": "Luke (Preferenze)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "modifica_preferenze": {
+      "ai_tool": [
+        [
+          {
+            "node": "Luke (Preferenze)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Luke (Preferenze)": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Luke (Preferenze)",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "reset_preferenze": {
+      "ai_tool": [
+        [
+          {
+            "node": "Luke (Preferenze)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "571ac0e5-1d11-406a-8c95-0e70fba9856a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f44c30e2686311de7bb17a64c7b986fb7f85ddbfdfe435460331614ece5331d7"
+  },
+  "id": "iK_1iot2Didm3CzYTmJWu",
+  "tags": []
+}
